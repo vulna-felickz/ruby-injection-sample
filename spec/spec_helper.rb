@@ -9,6 +9,6 @@ RSpec.configure do |config|
   config.include Rack::Test::Methods
   
   def app
-    SecureApp
+    VulnerableApp
   end
 end

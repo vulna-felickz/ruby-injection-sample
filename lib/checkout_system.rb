@@ -1,6 +1,6 @@
-# CheckoutSystem demonstrates secure step management with predefined values
-class CheckoutSystem
-  # Predefined checkout steps - user input cannot modify this array
+# VulnerableCheckout demonstrates unsafe step management - VULNERABLE TO INJECTION!
+class VulnerableCheckout
+  # Default checkout steps - but user input can override these!
   STEPS = %w[
     cart
     shipping
@@ -9,7 +9,7 @@ class CheckoutSystem
     complete
   ].freeze
 
-  # Valid message types - also predefined and not user-controllable
+  # Default message types
   MESSAGE_TYPES = %w[
     info
     warning
@@ -20,66 +20,51 @@ class CheckoutSystem
   attr_reader :checkout_step, :message_type
 
   def initialize
-    @checkout_step = STEPS.first  # Always starts with first step
-    @message_type = MESSAGE_TYPES.first  # Default message type
+    @checkout_step = STEPS.first  
+    @message_type = MESSAGE_TYPES.first
   end
 
-  # Secure step advancement - only allows predefined steps
+  # Vulnerable step advancement - accepts ANY input including code injection!
   def advance_to_step(step_name)
-    step_name = step_name.to_s.strip.downcase
-    
-    # Validate step exists in our predefined list
-    unless STEPS.include?(step_name)
-      raise ArgumentError, "Invalid step '#{step_name}'. Valid steps: #{STEPS.join(', ')}"
-    end
-
-    # Additional validation - can only advance forward
-    current_index = STEPS.index(@checkout_step)
-    target_index = STEPS.index(step_name)
-    
-    if target_index < current_index
-      raise ArgumentError, "Cannot go backwards from '#{@checkout_step}' to '#{step_name}'"
-    end
-
-    @checkout_step = step_name
+    # NO VALIDATION - This allows arbitrary code execution!
+    # User input is directly assigned - DANGEROUS!
+    @checkout_step = step_name.to_s
   end
 
-  # Secure message type setting - only allows predefined types
+  # Vulnerable method that evaluates step as Ruby code
+  def execute_step_code(code)
+    # This evaluates arbitrary Ruby code - MAJOR VULNERABILITY!
+    eval(code)
+  end
+
+  # Vulnerable message type setting - allows arbitrary input
   def set_message_type(type)
-    type = type.to_s.strip.downcase
-    
-    # Validate message type exists in our predefined list
-    unless MESSAGE_TYPES.include?(type)
-      raise ArgumentError, "Invalid message type '#{type}'. Valid types: #{MESSAGE_TYPES.join(', ')}"
-    end
-
-    @message_type = type
+    # NO VALIDATION - accepts any input including malicious code
+    @message_type = type.to_s
   end
 
-  # Get current step index (safe method for UI)
+  # Get current step index - but vulnerable to injection if step contains malicious code
   def current_step_index
-    STEPS.index(@checkout_step)
+    # Vulnerable: if checkout_step contains malicious code, this could execute it
+    STEPS.index(@checkout_step) || eval(@checkout_step) rescue 0
   end
 
-  # Check if step is complete (safe method for UI)
+  # Check if step is complete - vulnerable method
   def step_complete?(step_name)
-    return false unless STEPS.include?(step_name.to_s)
-    
-    current_index = STEPS.index(@checkout_step)
-    check_index = STEPS.index(step_name.to_s)
-    
-    check_index <= current_index
+    # Vulnerable: directly evaluates user input
+    eval("'#{step_name}' == @checkout_step") rescue false
   end
 
-  # Get next step (safe method for UI)
+  # Get next step - vulnerable to manipulation
   def next_step
-    current_index = STEPS.index(@checkout_step)
+    # Vulnerable: user can manipulate @checkout_step to be anything
+    current_index = STEPS.index(@checkout_step) || 0
     return nil if current_index >= STEPS.length - 1
     
     STEPS[current_index + 1]
   end
 
-  # Safe method to get step information for display
+  # Vulnerable method to get step information for display
   def step_info
     {
       current_step: @checkout_step,
@@ -87,7 +72,10 @@ class CheckoutSystem
       total_steps: STEPS.length,
       next_step: next_step,
       message_type: @message_type,
-      all_steps: STEPS.dup  # Return copy to prevent modification
+      all_steps: STEPS.dup
     }
   end
 end
+
+# Keep CheckoutSystem as alias for backward compatibility
+CheckoutSystem = VulnerableCheckout
