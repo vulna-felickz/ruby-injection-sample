@@ -11,13 +11,7 @@ class SecureApp < Sinatra::Base
   enable :sessions
   set :session_secret, 'secure_demo_secret_change_in_production_this_is_32_bytes_or_more_for_security'
 
-  # Initialize sample data
-  def initialize
-    super
-    @sample_user = User.new(1, 'John Doe', 'john@example.com')
-    @sample_product = Product.new(1, 'Ruby Book', 'Learn Ruby Programming')
-    @sample_order = Order.new(1, @sample_user, @sample_product)
-  end
+
 
   # Helper to get or create checkout session
   def checkout_session
@@ -26,19 +20,72 @@ class SecureApp < Sinatra::Base
 
   # Home page showing the secure demo
   get '/' do
-    erb :index
+    html = <<~HTML
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Secure Ruby Injection Demo</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          .container { max-width: 800px; margin: 0 auto; }
+          .nav { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+          .nav a { margin-right: 15px; text-decoration: none; color: #0066cc; }
+          .code { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; }
+          .btn { padding: 8px 16px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="nav">
+            <a href="/">Home</a>
+            <a href="/demo/cache">Cache Demo</a>
+            <a href="/checkout">Checkout Demo</a>
+            <a href="/api/safe_call">API Demo</a>
+          </div>
+          <h1>Secure Ruby Injection Prevention Demo</h1>
+          <p>This application demonstrates secure coding practices that prevent code injection attacks in Ruby applications.</p>
+          
+          <h2>Key Security Features</h2>
+          <ul>
+            <li><strong>Safe Method Whitelisting:</strong> Only predefined safe methods can be called</li>
+            <li><strong>Predefined Steps Array:</strong> Checkout steps are restricted to a frozen array</li>
+            <li><strong>Input Validation:</strong> All user inputs are validated against whitelists</li>
+            <li><strong>Safe Method Invocation:</strong> Uses try() and public_send() safely</li>
+            <li><strong>No Dynamic Code Execution:</strong> Never uses eval(), system(), or other dangerous methods</li>
+          </ul>
+          
+          <h2>Test the Security</h2>
+          <p>Try these endpoints to see injection prevention in action:</p>
+          <ul>
+            <li><a href="/demo/cache">Safe Cache Operations</a></li>
+            <li><a href="/demo/cache/unsafe?method=system">Unsafe Method Call (blocked)</a></li>
+            <li><a href="/api/safe_call?object=user&method=name">Safe API Call</a></li>
+            <li><a href="/api/safe_call?object=user&method=system">Unsafe API Call (blocked)</a></li>
+          </ul>
+        </div>
+      </body>
+      </html>
+    HTML
+    
+    content_type 'text/html'
+    html
   end
 
   # Demo endpoint showing secure cache usage
   get '/demo/cache' do
+    # Initialize sample data for this request
+    sample_user = User.new(1, 'John Doe', 'john@example.com')
+    sample_product = Product.new(1, 'Ruby Book', 'Learn Ruby Programming')
+    sample_order = Order.new(1, sample_user, sample_product)
+    
     begin
       # These are examples of SAFE operations using try_cache
       safe_examples = {
-        user_name: SecureCache.try_cache(@sample_user, 'name'),
-        user_email: SecureCache.try_cache(@sample_user, 'email'),
-        product_title: SecureCache.try_cache(@sample_product, 'title'),
-        order_user_name: SecureCache.try_cache(@sample_order, 'name', 'user'),
-        order_product_title: SecureCache.try_cache(@sample_order, 'title', 'product')
+        user_name: SecureCache.try_cache(sample_user, 'name'),
+        user_email: SecureCache.try_cache(sample_user, 'email'),
+        product_title: SecureCache.try_cache(sample_product, 'title'),
+        order_user_name: SecureCache.try_cache(sample_order, 'name', 'user'),
+        order_product_title: SecureCache.try_cache(sample_order, 'title', 'product')
       }
 
       json({
@@ -57,10 +104,11 @@ class SecureApp < Sinatra::Base
   # Attempt to use unsafe method (should fail)
   get '/demo/cache/unsafe' do
     method_name = params[:method] || 'system'
+    sample_user = User.new(1, 'John Doe', 'john@example.com')
     
     begin
       # This will fail because 'system' is not in SAFE_METHODS
-      result = SecureCache.try_cache(@sample_user, method_name)
+      result = SecureCache.try_cache(sample_user, method_name)
       
       json({
         status: 'error',
@@ -77,8 +125,44 @@ class SecureApp < Sinatra::Base
 
   # Checkout demo endpoints
   get '/checkout' do
-    @checkout = checkout_session
-    erb :checkout
+    checkout = checkout_session
+    
+    html = <<~HTML
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Secure Checkout Demo</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          .container { max-width: 800px; margin: 0 auto; }
+          .code { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; }
+          .btn { padding: 8px 16px; background: #0066cc; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Secure Checkout System Demo</h1>
+          <p>Current step: <strong>#{checkout.checkout_step}</strong> (#{checkout.current_step_index + 1}/#{CheckoutSystem::STEPS.length})</p>
+          
+          <h2>Valid Steps</h2>
+          <p>Only these predefined steps are allowed:</p>
+          <div class="code">#{CheckoutSystem::STEPS.join(' → ')}</div>
+          
+          <h2>API Endpoints</h2>
+          <ul>
+            <li><a href="/checkout/advance" onclick="fetch('/checkout/advance', {method: 'POST'}); return false;">Advance Step (POST)</a></li>
+            <li><a href="/checkout/inject" onclick="fetch('/checkout/inject', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'malicious_step=system(\"whoami\")'}).then(r => r.json()).then(console.log); return false;">Try Injection (POST)</a></li>
+            <li><a href="/checkout/reset" onclick="fetch('/checkout/reset', {method: 'POST'}); return false;">Reset (POST)</a></li>
+          </ul>
+          
+          <p><a href="/">← Back to Home</a></p>
+        </div>
+      </body>
+      </html>
+    HTML
+    
+    content_type 'text/html'
+    html
   end
 
   # Advance checkout step (with validation)
@@ -154,11 +238,16 @@ class SecureApp < Sinatra::Base
     object_type = params[:object] || 'user'
     method_name = params[:method] || 'name'
 
+    # Initialize sample data for this request
+    sample_user = User.new(1, 'John Doe', 'john@example.com')
+    sample_product = Product.new(1, 'Ruby Book', 'Learn Ruby Programming')
+    sample_order = Order.new(1, sample_user, sample_product)
+
     target_object = case object_type
-                   when 'user' then @sample_user
-                   when 'product' then @sample_product
-                   when 'order' then @sample_order
-                   else @sample_user
+                   when 'user' then sample_user
+                   when 'product' then sample_product
+                   when 'order' then sample_order
+                   else sample_user
                    end
 
     begin
@@ -182,7 +271,76 @@ class SecureApp < Sinatra::Base
 
   # Show security documentation
   get '/security' do
-    erb :security
+    html = <<~HTML
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Security Features</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          .container { max-width: 800px; margin: 0 auto; }
+          .code { background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Security Features Explained</h1>
+
+          <h2>1. Safe Method Whitelisting</h2>
+          <p>The <code>try_cache</code> method uses a predefined whitelist of safe methods:</p>
+          <div class="code">
+          SAFE_METHODS = %w[name email created_at updated_at id status title description].freeze
+          </div>
+          <p>Any method not in this list will be rejected, preventing arbitrary code execution.</p>
+
+          <h2>2. Predefined Steps Array</h2>
+          <p>The checkout system only allows predefined steps:</p>
+          <div class="code">
+          STEPS = %w[cart shipping payment confirmation complete].freeze
+          </div>
+          <p>User input cannot modify this array or add new steps.</p>
+
+          <h2>3. Input Validation</h2>
+          <p>All user inputs are validated against whitelists before being processed:</p>
+          <ul>
+            <li>Method names must be in SAFE_METHODS</li>
+            <li>Checkout steps must be in STEPS array</li>
+            <li>Message types must be in MESSAGE_TYPES array</li>
+          </ul>
+
+          <h2>4. Safe Method Invocation</h2>
+          <p>We use Ruby's safe methods for invocation:</p>
+          <ul>
+            <li><code>respond_to?</code> - Checks if method exists before calling</li>
+            <li><code>public_send()</code> - Only calls public methods</li>
+          </ul>
+
+          <h2>5. No Dynamic Code Execution</h2>
+          <p>The application never uses dangerous methods like:</p>
+          <ul>
+            <li><code>eval()</code></li>
+            <li><code>system()</code></li>
+            <li><code>exec()</code></li>
+            <li><code>send()</code> without validation</li>
+          </ul>
+
+          <h2>Security Testing</h2>
+          <p>You can test various injection attempts:</p>
+          <ul>
+            <li>Try calling <code>system</code>, <code>eval</code>, or other dangerous methods</li>
+            <li>Attempt to inject code through checkout steps</li>
+            <li>Try to access private methods or attributes</li>
+          </ul>
+          <p>All attempts should be blocked with appropriate error messages.</p>
+          
+          <p><a href="/">← Back to Home</a></p>
+        </div>
+      </body>
+      </html>
+    HTML
+    
+    content_type 'text/html'
+    html
   end
 
   # Error handler

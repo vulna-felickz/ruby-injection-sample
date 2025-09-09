@@ -1,0 +1,7 @@
+vendor/bundle
+.bundle
+.ruby-version
+*.log
+tmp/
+.DS_Store
+Thumbs.db
