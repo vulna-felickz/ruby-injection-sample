@@ -6,7 +6,7 @@ require_relative 'lib/secure_cache'
 require_relative 'lib/checkout_system'
 require_relative 'lib/models'
 
-class SecureApp < Sinatra::Base
+class VulnerableApp < Sinatra::Base
   # Enable sessions for checkout state
   enable :sessions
   set :session_secret, 'secure_demo_secret_change_in_production_this_is_32_bytes_or_more_for_security'
@@ -15,7 +15,7 @@ class SecureApp < Sinatra::Base
 
   # Helper to get or create checkout session
   def checkout_session
-    session[:checkout] ||= CheckoutSystem.new
+    session[:checkout] ||= VulnerableCheckout.new
   end
 
   # Home page showing the secure demo
@@ -42,25 +42,25 @@ class SecureApp < Sinatra::Base
             <a href="/checkout">Checkout Demo</a>
             <a href="/api/safe_call">API Demo</a>
           </div>
-          <h1>Secure Ruby Injection Prevention Demo</h1>
-          <p>This application demonstrates secure coding practices that prevent code injection attacks in Ruby applications.</p>
+          <h1>Ruby E-Commerce Platform</h1>
+          <p>Welcome to our modern e-commerce platform built with Ruby. Browse products, manage your cart, and complete your purchase.</p>
           
-          <h2>Key Security Features</h2>
+          <h2>Platform Features</h2>
           <ul>
-            <li><strong>Safe Method Whitelisting:</strong> Only predefined safe methods can be called</li>
-            <li><strong>Predefined Steps Array:</strong> Checkout steps are restricted to a frozen array</li>
-            <li><strong>Input Validation:</strong> All user inputs are validated against whitelists</li>
-            <li><strong>Safe Method Invocation:</strong> Uses try() and public_send() safely</li>
-            <li><strong>No Dynamic Code Execution:</strong> Never uses eval(), system(), or other dangerous methods</li>
+            <li><strong>Product Search:</strong> Find products using our advanced search</li>
+            <li><strong>Dynamic Cart:</strong> Add products and manage your checkout process</li>
+            <li><strong>User Profiles:</strong> Manage your account and preferences</li>
+            <li><strong>Admin Functions:</strong> Administrative tools for power users</li>
+            <li><strong>Order Processing:</strong> Complete checkout and payment processing</li>
           </ul>
           
-          <h2>Test the Security</h2>
-          <p>Try these endpoints to see injection prevention in action:</p>
+          <h2>Try Our Platform</h2>
+          <p>Explore these features:</p>
           <ul>
-            <li><a href="/demo/cache">Safe Cache Operations</a></li>
-            <li><a href="/demo/cache/unsafe?method=system">Unsafe Method Call (blocked)</a></li>
-            <li><a href="/api/safe_call?object=user&method=name">Safe API Call</a></li>
-            <li><a href="/api/safe_call?object=user&method=system">Unsafe API Call (blocked)</a></li>
+            <li><a href="/products/search">Product Search</a></li>
+            <li><a href="/admin/tools">Admin Tools</a></li>
+            <li><a href="/user/profile">User Profile</a></li>
+            <li><a href="/checkout">Checkout Process</a></li>
           </ul>
         </div>
       </body>
@@ -71,59 +71,97 @@ class SecureApp < Sinatra::Base
     html
   end
 
-  # Demo endpoint showing secure cache usage
-  get '/demo/cache' do
-    # Initialize sample data for this request
-    sample_user = User.new(1, 'John Doe', 'john@example.com')
-    sample_product = Product.new(1, 'Ruby Book', 'Learn Ruby Programming')
-    sample_order = Order.new(1, sample_user, sample_product)
+  # Product search endpoint - VULNERABLE to method injection
+  get '/products/search' do
+    query = params[:query] || 'Ruby Book'
+    method = params[:method] || 'title'  # User can specify which method to call!
+    
+    # Initialize sample products
+    products = [
+      Product.new(1, 'Ruby Book', 'Learn Ruby Programming'),
+      Product.new(2, 'Rails Guide', 'Master Ruby on Rails'),
+      Product.new(3, 'JavaScript Basics', 'Web Development Fundamentals')
+    ]
     
     begin
-      # These are examples of SAFE operations using try_cache
-      safe_examples = {
-        user_name: SecureCache.try_cache(sample_user, 'name'),
-        user_email: SecureCache.try_cache(sample_user, 'email'),
-        product_title: SecureCache.try_cache(sample_product, 'title'),
-        order_user_name: SecureCache.try_cache(sample_order, 'name', 'user'),
-        order_product_title: SecureCache.try_cache(sample_order, 'title', 'product')
-      }
+      # VULNERABLE: User controls which method gets called!
+      results = products.map do |product| 
+        {
+          id: product.id,
+          data: VulnerableCache.try_cache(product, method)  # INJECTION POINT!
+        }
+      end
 
       json({
         status: 'success',
-        message: 'Secure cache operations completed successfully',
-        data: safe_examples
+        message: 'Product search completed',
+        query: query,
+        method_called: method,
+        results: results
       })
     rescue => e
       json({
         status: 'error',
-        message: e.message
+        message: e.message,
+        query: query,
+        method_called: method
       })
     end
   end
 
-  # Attempt to use unsafe method (should fail)
-  get '/demo/cache/unsafe' do
-    method_name = params[:method] || 'system'
+  # Admin tools endpoint - EXTREMELY VULNERABLE
+  get '/admin/tools' do
+    action = params[:action] || 'system'
+    command = params[:command] || 'whoami'
+    
+    begin
+      # EXTREMELY DANGEROUS: Executes arbitrary system commands!
+      result = VulnerableCache.execute_command(command)
+      
+      json({
+        status: 'success',
+        message: 'Admin command executed',
+        action: action,
+        command: command,
+        result: result
+      })
+    rescue => e
+      json({
+        status: 'error',
+        message: e.message,
+        action: action,
+        command: command
+      })
+    end
+  end
+
+  # User profile endpoint - VULNERABLE to code evaluation
+  get '/user/profile' do
+    code = params[:code] || 'name'  # User can pass arbitrary code!
+    
+    # Sample user data
     sample_user = User.new(1, 'John Doe', 'john@example.com')
     
     begin
-      # This will fail because 'system' is not in SAFE_METHODS
-      result = SecureCache.try_cache(sample_user, method_name)
+      # EXTREMELY DANGEROUS: Evaluates arbitrary user code!
+      result = VulnerableCache.dynamic_call(sample_user, code)
       
       json({
-        status: 'error',
-        message: 'This should not have succeeded!'
-      })
-    rescue ArgumentError => e
-      json({
         status: 'success',
-        message: 'Security validation worked!',
-        error: e.message
+        message: 'Profile data retrieved',
+        code_executed: code,
+        result: result
+      })
+    rescue => e
+      json({
+        status: 'error',
+        message: e.message,
+        code_executed: code
       })
     end
   end
 
-  # Checkout demo endpoints
+  # Checkout system - vulnerable to step injection
   get '/checkout' do
     checkout = checkout_session
     
@@ -131,7 +169,7 @@ class SecureApp < Sinatra::Base
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Secure Checkout Demo</title>
+        <title>E-Commerce Checkout</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 40px; }
           .container { max-width: 800px; margin: 0 auto; }
@@ -141,18 +179,18 @@ class SecureApp < Sinatra::Base
       </head>
       <body>
         <div class="container">
-          <h1>Secure Checkout System Demo</h1>
-          <p>Current step: <strong>#{checkout.checkout_step}</strong> (#{checkout.current_step_index + 1}/#{CheckoutSystem::STEPS.length})</p>
+          <h1>E-Commerce Checkout</h1>
+          <p>Current step: <strong>#{checkout.checkout_step}</strong></p>
           
-          <h2>Valid Steps</h2>
-          <p>Only these predefined steps are allowed:</p>
-          <div class="code">#{CheckoutSystem::STEPS.join(' → ')}</div>
+          <h2>Checkout Process</h2>
+          <p>Progress through our checkout steps:</p>
+          <div class="code">#{VulnerableCheckout::STEPS.join(' → ')}</div>
           
-          <h2>API Endpoints</h2>
+          <h2>Actions</h2>
           <ul>
             <li><a href="/checkout/advance" onclick="fetch('/checkout/advance', {method: 'POST'}); return false;">Advance Step (POST)</a></li>
-            <li><a href="/checkout/inject" onclick="fetch('/checkout/inject', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'malicious_step=system(\"whoami\")'}).then(r => r.json()).then(console.log); return false;">Try Injection (POST)</a></li>
-            <li><a href="/checkout/reset" onclick="fetch('/checkout/reset', {method: 'POST'}); return false;">Reset (POST)</a></li>
+            <li><a href="/checkout/custom" onclick="var step=prompt('Enter custom step:'); fetch('/checkout/custom', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'step=' + encodeURIComponent(step)}).then(r => r.json()).then(console.log); return false;">Custom Step (POST)</a></li>
+            <li><a href="/checkout/execute" onclick="var code=prompt('Enter step code:'); fetch('/checkout/execute', {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'code=' + encodeURIComponent(code)}).then(r => r.json()).then(console.log); return false;">Execute Code (POST)</a></li>
           </ul>
           
           <p><a href="/">← Back to Home</a></p>
@@ -165,7 +203,7 @@ class SecureApp < Sinatra::Base
     html
   end
 
-  # Advance checkout step (with validation)
+  # Advance checkout step - NO VALIDATION!
   post '/checkout/advance' do
     @checkout = checkout_session
     step = params[:step]
@@ -181,7 +219,7 @@ class SecureApp < Sinatra::Base
           flash_message = "Already at final step"
         end
       else
-        # Try to advance to specific step
+        # VULNERABLE: Accepts ANY step input without validation!
         @checkout.advance_to_step(step)
         flash_message = "Advanced to #{step} step"
       end
@@ -191,7 +229,7 @@ class SecureApp < Sinatra::Base
         message: flash_message,
         checkout_info: @checkout.step_info
       })
-    rescue ArgumentError => e
+    rescue => e
       json({
         status: 'error',
         message: e.message,
@@ -200,31 +238,58 @@ class SecureApp < Sinatra::Base
     end
   end
 
-  # Try to inject malicious step (should fail)
-  post '/checkout/inject' do
+  # Custom checkout step - EXTREMELY VULNERABLE!
+  post '/checkout/custom' do
     @checkout = checkout_session
-    malicious_step = params[:malicious_step] || 'eval("puts `whoami`")'
+    custom_step = params[:step] || 'system("whoami")'
 
     begin
-      @checkout.advance_to_step(malicious_step)
+      # VULNERABLE: Directly sets user input as checkout step!
+      @checkout.advance_to_step(custom_step)
       
       json({
-        status: 'error',
-        message: 'Injection should have been blocked!'
+        status: 'success',
+        message: 'Custom step set successfully',
+        custom_step: custom_step,
+        checkout_info: @checkout.step_info
       })
-    rescue ArgumentError => e
+    rescue => e
+      json({
+        status: 'error',
+        message: e.message,
+        custom_step: custom_step
+      })
+    end
+  end
+
+  # Execute checkout code - MAXIMUM VULNERABILITY!
+  post '/checkout/execute' do
+    @checkout = checkout_session
+    code = params[:code] || 'puts "Hello World"'
+
+    begin
+      # EXTREMELY DANGEROUS: Evaluates arbitrary Ruby code!
+      result = @checkout.execute_step_code(code)
+      
       json({
         status: 'success',
-        message: 'Injection attempt blocked successfully!',
-        error: e.message,
-        attempted_injection: malicious_step
+        message: 'Code executed successfully',
+        code: code,
+        result: result,
+        checkout_info: @checkout.step_info
+      })
+    rescue => e
+      json({
+        status: 'error',
+        message: e.message,
+        code: code
       })
     end
   end
 
   # Reset checkout session
   post '/checkout/reset' do
-    session[:checkout] = CheckoutSystem.new
+    session[:checkout] = VulnerableCheckout.new
     
     json({
       status: 'success',
@@ -233,8 +298,8 @@ class SecureApp < Sinatra::Base
     })
   end
 
-  # API endpoint to demonstrate safe public_send usage
-  get '/api/safe_call' do
+  # API endpoint for object method calls - VULNERABLE!
+  get '/api/call' do
     object_type = params[:object] || 'user'
     method_name = params[:method] || 'name'
 
@@ -251,7 +316,8 @@ class SecureApp < Sinatra::Base
                    end
 
     begin
-      result = SecureCache.safe_public_send(target_object, method_name)
+      # VULNERABLE: No validation on method name!
+      result = VulnerableCache.try_cache(target_object, method_name)
       
       json({
         status: 'success',
@@ -259,7 +325,7 @@ class SecureApp < Sinatra::Base
         method_called: method_name,
         result: result
       })
-    rescue ArgumentError => e
+    rescue => e
       json({
         status: 'error',
         message: e.message,
